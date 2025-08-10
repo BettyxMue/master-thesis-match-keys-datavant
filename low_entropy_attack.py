@@ -9,6 +9,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, date
 from typing import Dict, Any, Iterable, Tuple, Set, Optional
 from jellyfish import soundex
+import cologne_phonetics 
 from Crypto.Cipher import AES
 import pandas as pd
 from faker import Faker
@@ -177,6 +178,21 @@ def attack_entropy_first_T2(master_func, master_tokens: Set[bytes]) -> Dict[byte
     hits = {}
     sdx_last = sorted({soundex(ln) for ln in TOP_LAST if soundex(ln)})
     sdx_first = sorted({soundex(fn) for fn in TOP_FIRST if soundex(fn)})
+
+    """sdx_last = []
+    for ln in TOP_LAST:
+        last_cologne_tupel = cologne_phonetics.encode(ln) if cologne_phonetics.encode(ln) else None
+        for _, last_cologne in last_cologne_tupel:
+            sdx_last.append(last_cologne)
+    sdx_last = sorted(sdx_last)
+
+    sdx_first = []
+    for fn in TOP_FIRST:
+        first_cologne_tupel = cologne_phonetics.encode(fn) if cologne_phonetics.encode(fn) else None
+        for _, first_cologne in first_cologne_tupel:
+            sdx_first.append(first_cologne)
+    sdx_first = sorted(sdx_first)"""
+
     for sdx_ln in sdx_last:
         for sdx_fn in sdx_first:
             for g in GENDERS:
