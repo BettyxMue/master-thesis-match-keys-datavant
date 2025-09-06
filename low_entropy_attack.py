@@ -9,10 +9,16 @@ from collections import Counter, defaultdict
 from datetime import datetime, date
 from typing import Dict, Any, Iterable, Tuple, Set, Optional
 from jellyfish import soundex
-import cologne_phonetics 
 from Crypto.Cipher import AES
 import pandas as pd
 from faker import Faker
+from datetime import timedelta
+import time
+
+# Calculate all possible birthdays for ages 18 to 80
+today = date.today()
+min_year = today.year - 80
+max_year = today.year - 18
 
 # =============================
 # Normalization / helpers
@@ -45,6 +51,15 @@ def first_initial(fn: str) -> str:
 def first3(fn: str) -> str:
     n = norm(fn)
     return n[:3] if n else ""
+
+def time_attack(func, *args, label=None):
+    start = time.time()
+    result = func(*args)
+    end = time.time()
+    elapsed = end - start
+    if label:
+        print(f"[TIMER] {label}: {elapsed:.2f} seconds")
+    return result, elapsed
 
 # =============================
 # Master token functions
@@ -134,7 +149,7 @@ def decrypt_columns(rows: list, site_key_32: bytes, colnames: Iterable[str]) -> 
 # =============================
 # Dictionaries
 # =============================
-with open("nachnamen.txt", "r", encoding="utf-8") as f:
+"""with open("nachnamen.txt", "r", encoding="utf-8") as f:
     TOP_LAST = [line.strip().lower() for line in f if line.strip() and not line.startswith("#")]
 
 with open("vornamen.txt", "r", encoding="utf-8") as f:
@@ -144,21 +159,21 @@ GENDERS = ["m","f","u"]
 
 # Generate 200 birthdays
 fake = Faker()
-TOP_DOB = [fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y%m%d') for _ in range(200)] 
+TOP_DOB = [fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y%m%d') for _ in range(200)]"""
 
 # =============================
 # Similiar DB
 # =============================
 
-"""df_distribution = pd.read_csv(r"known_data_clean.csv")
+df_distribution = pd.read_csv(r"known_data_clean.csv")
 
 TOP_FIRST = df_distribution["first_name"].value_counts().head(500).index.tolist()
 TOP_LAST = df_distribution["last_name"].value_counts().head(500).index.tolist()
-TOP_DOB = df_distribution["dob"].value_counts().head(500).index.tolist()
-TOP_YOB = df_distribution["year_of_birth"].value_counts().head(500).index.tolist()
-TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()
-TOP_ADDRESS = df_distribution["address"].value_counts().head(500).index.tolist()
-GENDERS = ["m","f","u"]"""
+# TOP_DOB = df_distribution["dob"].value_counts().head(500).index.tolist()
+# TOP_YOB = df_distribution["year_of_birth"].value_counts().head(500).index.tolist()
+# TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()
+# TOP_ADDRESS = df_distribution["address"].value_counts().head(500).index.tolist()
+GENDERS = ["m","f","u"]
 
 # =============================
 # Attack core
@@ -169,12 +184,34 @@ def attack_entropy_first_T1(master_func, master_tokens: Set[bytes]) -> Dict[byte
     for ln in TOP_LAST:
         for fi in "abcdefghijklmnopqrstuvwxyz":
             for g in GENDERS:
-                for dob in TOP_DOB:
+                """for dob in TOP_DOB:
                     inp = f"{norm(ln)}|{fi}|{g}|{dob}"
                     if not inp: continue
                     mt = master_func(inp)
                     if mt in master_tokens:
-                        hits[mt] = (norm(ln), fi, g, dob)
+                        hits[mt] = (norm(ln), fi, g, dob)"""
+                for year in range(min_year, max_year + 1):
+                    for month in range(1, 13):
+                        if month in [1, 3, 5, 7, 8, 10, 12]:
+                            max_day = 31
+                        elif month in [4, 6, 9, 11]:
+                            max_day = 30
+                        elif month == 2:
+                            if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)):
+                                max_day = 29
+                            else:
+                                max_day = 28
+                        else:
+                            max_day = 31
+                        for day in range(1, max_day + 1):
+                            dob_obj = date(year, month, day)
+                            dob = dob_obj.strftime('%Y%m%d')
+                            inp = f"{norm(ln)}|{fi}|{g}|{dob}"
+                            if not inp:
+                                continue
+                            mt = master_func(inp)
+                            if mt in master_tokens:
+                                hits[mt] = (norm(ln), fi, g, dob)
     return hits
 
 def attack_entropy_first_T2(master_func, master_tokens: Set[bytes]) -> Dict[bytes, Tuple[str,str,str,str]]:
@@ -183,29 +220,37 @@ def attack_entropy_first_T2(master_func, master_tokens: Set[bytes]) -> Dict[byte
     sdx_last = sorted({soundex(ln) for ln in TOP_LAST if soundex(ln)})
     sdx_first = sorted({soundex(fn) for fn in TOP_FIRST if soundex(fn)})
 
-    """sdx_last = []
-    for ln in TOP_LAST:
-        last_cologne_tupel = cologne_phonetics.encode(ln) if cologne_phonetics.encode(ln) else None
-        for _, last_cologne in last_cologne_tupel:
-            sdx_last.append(last_cologne)
-    sdx_last = sorted(sdx_last)
-
-    sdx_first = []
-    for fn in TOP_FIRST:
-        first_cologne_tupel = cologne_phonetics.encode(fn) if cologne_phonetics.encode(fn) else None
-        for _, first_cologne in first_cologne_tupel:
-            sdx_first.append(first_cologne)
-    sdx_first = sorted(sdx_first)"""
-
     for sdx_ln in sdx_last:
         for sdx_fn in sdx_first:
             for g in GENDERS:
-                for dob in TOP_DOB:
+                """for dob in TOP_DOB:
                     inp = f"{sdx_ln}|{sdx_fn}|{g}|{dob}"
                     if not inp: continue
                     mt = master_func(inp)
                     if mt in master_tokens:
-                        hits[mt] = (sdx_ln, sdx_fn, g, dob)
+                        hits[mt] = (sdx_ln, sdx_fn, g, dob)"""
+                for year in range(min_year, max_year + 1):
+                    for month in range(1, 13):
+                        if month in [1, 3, 5, 7, 8, 10, 12]:
+                            max_day = 31
+                        elif month in [4, 6, 9, 11]:
+                            max_day = 30
+                        elif month == 2:
+                            if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)):
+                                max_day = 29
+                            else:
+                                max_day = 28
+                        else:
+                            max_day = 31
+                        for day in range(1, max_day + 1):
+                            dob_obj = date(year, month, day)
+                            dob = dob_obj.strftime('%Y%m%d')
+                            inp = f"{sdx_ln}|{sdx_fn}|{g}|{dob}"
+                            if not inp:
+                                continue
+                            mt = master_func(inp)
+                            if mt in master_tokens:
+                                hits[mt] = (sdx_ln, sdx_fn, g, dob)
     return hits
 
 def pivot_to_T4_from_T1_T2(master_func,
@@ -280,20 +325,22 @@ def run_attack(args):
     t1_hits = {}
     if "T1" in dec:
         print("[*] Attacking T1 (ln|fi|g|dob)...")
-        t1_hits = attack_entropy_first_T1(master_func, dec["T1"])
+        t1_hits, t1_time = time_attack(attack_entropy_first_T1, master_func, dec["T1"], label="T1")
         print(f"    -> Found {len(t1_hits)} T1 preimages")
 
     t2_hits = {}
     if "T2" in dec:
         print("[*] Attacking T2 (sdx(ln)|sdx(fn)|g|dob)...")
-        t2_hits = attack_entropy_first_T2(master_func, dec["T2"])
+        t2_hits, t2_time = time_attack(attack_entropy_first_T2, master_func, dec["T2"], label="T2")
         print(f"    -> Found {len(t2_hits)} T2 preimages")
 
     # Phase 2: pivot into T4 using knowledge from T1 (and optionally T2)
     t4_pivot_hits = {}
+    t4_time = None
     if "T4" in dec and t1_hits:
         print("[*] Pivoting to T4 (ln|fn|g|dob) using T1 (and T2 if available)...")
         # Index T2 hits by (g,dob) for quick lookup of sdx_fn constraint
+        start = time.time()
         t2_idx = defaultdict(list)
         for mt, tpl in t2_hits.items():
             sdx_ln, sdx_fn, g, dob = tpl
@@ -311,19 +358,24 @@ def run_attack(args):
             else:
                 out = pivot_to_T4_from_T1_T2(master_func, dec["T4"], (ln, fi, g, dob), None)
                 t4_pivot_hits.update(out)
+        t4_time = time.time() - start
         print(f"    -> Resolved {len(t4_pivot_hits)} T4 preimages via pivot")
+        print(f"[Timer] T4: {t4_time:.2f} seconds")
 
     # Phase 3: pivot into t3 using knowledge from t4
     t3_pivot_hits = {}
     if "T3" in dec and t4_pivot_hits:
         print("[*] Pivoting to T3 (ln|fi|g|dob|zip3) using T4...")
+        start = time.time()
         for mt4, (ln, fi, g, dob) in t4_pivot_hits.items():
             out = pivot_to_T3_from_T4(master_func, dec["T3"], (ln, fi, g, dob))
             t3_pivot_hits.update(out)
+        t3_time = time.time() - start
         print(f"    -> Resolved {len(t3_pivot_hits)} T3 preimages via pivot")
+        print(f"[Timer] T3: {t3_time:.2f} seconds")
 
     # Report
-    print("\n=== RESULTS ===")
+    """print("\n=== RESULTS ===")
     if t1_hits:
         print(f"[T1] {len(t1_hits)} master tokens cracked")
         for mt, tpl in list(t1_hits.items())[:20]:
@@ -339,24 +391,28 @@ def run_attack(args):
     if t3_pivot_hits:
         print(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)")
         for mt, tpl in list(t3_pivot_hits.items())[:20]:
-            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}")
+            print(f"  MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}")"""
 
     # Save results to a text file
     with open(args.outfile, "w", encoding="utf-8") as result_file:
         if t1_hits:
             result_file.write(f"[T1] {len(t1_hits)} master tokens cracked\n")
+            result_file.write(f"[TIMER] T1: {t1_time:.2f} seconds\n")
             for mt, tpl in t1_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
         if t2_hits:
             result_file.write(f"[T2] {len(t2_hits)} master tokens cracked\n")
+            result_file.write(f"[TIMER] T2: {t2_time:.2f} seconds\n")
             for mt, tpl in t2_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  sdx_ln={tpl[0]} sdx_fn={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
         if t4_pivot_hits:
             result_file.write(f"[T4] {len(t4_pivot_hits)} master tokens cracked (pivot)\n")
+            result_file.write(f"[TIMER] T4: {t4_time:.2f} seconds\n")
             for mt, tpl in t4_pivot_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fn={tpl[1]} g={tpl[2]} dob={tpl[3]}\n")
         if t3_pivot_hits:
             result_file.write(f"[T3] {len(t3_pivot_hits)} master tokens cracked (pivot)\n")
+            result_file.write(f"[TIMER] T3: {t3_time:.2f} seconds\n")
             for mt, tpl in t3_pivot_hits.items():
                 result_file.write(f"MT(hex)={mt.hex()}  ←  ln={tpl[0]} fi={tpl[1]} dob={tpl[2]} zip3={tpl[3]}\n")
 

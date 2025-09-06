@@ -1,8 +1,9 @@
 import pandas as pd
 import re
+from gender_guesser.detector import Detector
 
 # Load a sample of the voter dataset
-file_path = r"german_healthcare_records_10000.csv"
+file_path = r"ohio_voter_clean_new.csv"
 df = pd.read_csv(file_path)
 
 # Select relevant columns
@@ -11,10 +12,7 @@ df_new = df[[
     "last_name",
     "dob",
     "year_of_birth",
-    "gender",
     "zip",
-    "email",
-    "phone",
     "address"
 ]].copy()
 
@@ -23,27 +21,32 @@ df_new = df[[
 ############################
 
 # Replace German special characters with ASCII equivalents
-def replace_german_chars(s):
+"""def replace_german_chars(s):
     if isinstance(s, str):
         s = s.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
         s = s.replace("Ä", "Ae").replace("Ö", "Oe").replace("Ü", "Ue")
         s = s.replace("ß", "ss")
-    return s
+    return s"""
 
 # Normalize common German abbreviations in addresses
 address_replacements = {
-    "str.": "strasse",
-    "nr.": "nummer"
+    "rd": "road",
+    "st": "street",
+    "ave": "avenue",
+    "blvd": "boulevard",
+    "ln": "lane",
+    "dr": "drive",
+    "ct": "court",
+    "pl": "place",
+    "hwy": "highway",
+    "pkwy": "parkway",
+    "trl": "trail"
 }
 
 def normalize_address(address):
     for abbr, full in address_replacements.items():
         address = address.replace(abbr, full)
     return address
-
-# Remove leading zeros from numbers in addresses
-def remove_leading_zeros_from_address(address):
-    return re.sub(r'\b0+(\d+)', r'\1', address) if isinstance(address, str) else address
 
 ############################
 # Data Cleaning
@@ -52,47 +55,52 @@ def remove_leading_zeros_from_address(address):
 # Remove entries with missing values
 df_new = df_new.dropna()
 
-# Remove duplicates
-df_new = df_new.drop_duplicates()
-
-# Normalize German characters and abbreviations
-for col in ["first_name", "last_name", "address", "email"]:
-    if col in df_new.columns:
-        df_new[col] = df_new[col].apply(replace_german_chars)
+# Remove duplicates based on all columns after cleaning
+df_new = df_new.drop_duplicates(keep="first", ignore_index=True)
 
 # Adjust first names
 df_new["first_name"] = df_new["first_name"].str.strip().str.lower()
 
 # Adjust last names
-df_new["last_name"] = df_new["last_name"].str.replace("Beng", "", regex=False)
 df_new["last_name"] = df_new["last_name"].str.strip().str.lower()
 
 # Adjust addresses
 df_new["address"] = df_new["address"].apply(normalize_address)
-df_new["address"] = df_new["address"].str.replace("/", "", regex=False)
-df_new["address"] = df_new["address"].apply(remove_leading_zeros_from_address)
 df_new["address"] = df_new["address"].str.strip().str.lower()
 
 # Adjust phone number
-df_new["phone"] = df_new["phone"].str.replace("-", "", regex=False)
+"""df_new["phone"] = df_new["phone"].str.replace("-", "", regex=False)
 df_new["phone"] = df_new["phone"].str.replace("(0)", "", regex=False)
 df_new["phone"] = df_new["phone"].str.replace("+49", "0", regex=False)
 df_new["phone"] = df_new["phone"].str.replace("(", "", regex=False)
 df_new["phone"] = df_new["phone"].str.replace(")", "", regex=False)
 df_new["phone"] = df_new["phone"].str.replace(" ", "", regex=False)
-df_new["phone"] = df_new["phone"].str.strip().str.lower()
+df_new["phone"] = df_new["phone"].str.strip().str.lower()"""
 
-# Adjust email addresses
-df_new["email"] = df_new["email"].str.strip().str.lower()
+# Adjust birthday
+df_new["dob"] = pd.to_datetime(df_new["dob"], errors="coerce")
+df_new["dob"] = df_new["dob"].dt.strftime('%Y%m%d')
 
 # Extract the birth year from the date of birth
 if df_new["year_of_birth"].empty and df_new["dob"].notna():
     df_new["year_of_birth"] = df_new["dob"].str[:4]
+
+# Guess gender
+detector = Detector()
+def map_gender(gender):
+    if gender in ["male", "mostly male"]:
+        return "m"
+    elif gender in ["female", "mostly female"]:
+        return "f"
+    else:
+        return "u"
+cap_first_name = df_new["first_name"].str.capitalize()
+df_new["gender"] = cap_first_name.apply(detector.get_gender).apply(map_gender)
 
 ############################
 # Save to File
 ############################
 
 # Save the cleaned version
-output_path = r"german_healthdata_clean2.csv"
+output_path = r"ohio_cleaned.csv"
 df_new.to_csv(output_path, index=False, encoding="utf-8")
