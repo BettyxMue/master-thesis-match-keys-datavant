@@ -1,0 +1,5 @@
+Faker==37.6.0
+gender_guesser==0.4.0
+jellyfish==1.2.0
+pandas==2.0.3
+pycryptodome==3.23.0

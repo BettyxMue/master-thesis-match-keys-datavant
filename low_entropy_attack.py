@@ -149,7 +149,7 @@ def decrypt_columns(rows: list, site_key_32: bytes, colnames: Iterable[str]) -> 
 # =============================
 # Dictionaries
 # =============================
-"""with open("nachnamen.txt", "r", encoding="utf-8") as f:
+with open("nachnamen.txt", "r", encoding="utf-8") as f:
     TOP_LAST = [line.strip().lower() for line in f if line.strip() and not line.startswith("#")]
 
 with open("vornamen.txt", "r", encoding="utf-8") as f:
@@ -158,20 +158,20 @@ with open("vornamen.txt", "r", encoding="utf-8") as f:
 GENDERS = ["m","f","u"]
 
 # Generate 200 birthdays
-fake = Faker()
+"""fake = Faker()
 TOP_DOB = [fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y%m%d') for _ in range(200)]"""
 
 # =============================
 # Similiar DB
 # =============================
 
-df_distribution = pd.read_csv(r"known_data_clean.csv")
+df_distribution = pd.read_csv(r"ohio_cleaned.csv")
 
 TOP_FIRST = df_distribution["first_name"].value_counts().head(500).index.tolist()
 TOP_LAST = df_distribution["last_name"].value_counts().head(500).index.tolist()
 # TOP_DOB = df_distribution["dob"].value_counts().head(500).index.tolist()
 # TOP_YOB = df_distribution["year_of_birth"].value_counts().head(500).index.tolist()
-# TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()
+# TOP_ZIP = df_distribution["zip"].value_counts().head(500).index.tolist()s
 # TOP_ADDRESS = df_distribution["address"].value_counts().head(500).index.tolist()
 GENDERS = ["m","f","u"]
 
