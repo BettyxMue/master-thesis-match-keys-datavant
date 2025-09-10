@@ -7,19 +7,6 @@ __pycache__/
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
-# Data files
-*.csv
-*.txt
-*.tsv
-*.xlsx
-*.xls
-*.db
-*.sqlite
-*.log
-*.out
-*.bak
-*.tmp
-
 # OS files
 .DS_Store
 Thumbs.db
