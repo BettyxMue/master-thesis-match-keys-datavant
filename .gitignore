@@ -1,0 +1,46 @@
+# Python virtual environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Data files
+*.csv
+*.txt
+*.tsv
+*.xlsx
+*.xls
+*.db
+*.sqlite
+*.log
+*.out
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Environment files
+.env
+.env.*
+
+# Generated files
+*.egg-info/
+dist/
+build/
+
+# Test results
+*.coverage
+coverage.xml
+htmlcov/
+
+# Misc
+*.swp
+*.swo
